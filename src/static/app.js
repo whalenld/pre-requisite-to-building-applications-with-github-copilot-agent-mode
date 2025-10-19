@@ -13,6 +13,9 @@ document.addEventListener("DOMContentLoaded", () => {
       // Clear loading message
       activitiesList.innerHTML = "";
 
+      // Reset select options (keep default)
+      activitySelect.innerHTML = '<option value="">-- Select an activity --</option>';
+
       // Populate activities list
       Object.entries(activities).forEach(([name, details]) => {
         const activityCard = document.createElement("div");
@@ -20,19 +23,71 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const spotsLeft = details.max_participants - details.participants.length;
 
+        // Build participants section — server is expected to have escaped participant names
+        const participants = Array.isArray(details.participants) ? details.participants : [];
+        let participantsHtml = '<div class="participants"><strong>Participants:</strong>';
+        if (participants.length > 0) {
+          participantsHtml += "<ul>";
+          participantsHtml += participants
+            .map(
+              (p) =>
+                `<li><span class="participant-badge">${p}</span> <button class="participant-delete" data-activity="${encodeURIComponent(
+                  name
+                )}" data-email="${encodeURIComponent(p)}" title="Unregister">&times;</button></li>`
+            )
+            .join("");
+          participantsHtml += "</ul>";
+        } else {
+          participantsHtml += '<p class="no-participants">No participants yet</p>';
+        }
+        participantsHtml += "</div>";
+
+        // Insert server-escaped HTML (decoded by the browser)
         activityCard.innerHTML = `
           <h4>${name}</h4>
           <p>${details.description}</p>
           <p><strong>Schedule:</strong> ${details.schedule}</p>
           <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
+          ${participantsHtml}
         `;
 
         activitiesList.appendChild(activityCard);
 
-        // Add option to select dropdown
+          // Attach delete handlers for participant remove buttons
+          const deleteButtons = activityCard.querySelectorAll(".participant-delete");
+          deleteButtons.forEach((btn) => {
+            btn.addEventListener("click", async (e) => {
+              const activityName = decodeURIComponent(btn.getAttribute("data-activity"));
+              const email = decodeURIComponent(btn.getAttribute("data-email"));
+
+              if (!confirm(`Unregister ${email} from ${activityName}?`)) return;
+
+              try {
+                const res = await fetch(
+                  `/activities/${encodeURIComponent(activityName)}/participants?email=${encodeURIComponent(
+                    email
+                  )}`,
+                  { method: "DELETE" }
+                );
+
+                const result = await res.json();
+                if (res.ok) {
+                  // Refresh the list
+                  fetchActivities();
+                } else {
+                  alert(result.detail || "Failed to unregister participant");
+                }
+              } catch (err) {
+                console.error("Error unregistering:", err);
+                alert("Error unregistering participant. See console for details.");
+              }
+            });
+          });
+
+        // Add option to select dropdown — use innerHTML so escaped entities decode
         const option = document.createElement("option");
         option.value = name;
-        option.textContent = name;
+        option.innerHTML = name;
         activitySelect.appendChild(option);
       });
     } catch (error) {
@@ -59,11 +114,12 @@ document.addEventListener("DOMContentLoaded", () => {
       const result = await response.json();
 
       if (response.ok) {
-        messageDiv.textContent = result.message;
+        // server message is expected to be escaped when needed
+        messageDiv.innerHTML = result.message;
         messageDiv.className = "success";
         signupForm.reset();
       } else {
-        messageDiv.textContent = result.detail || "An error occurred";
+        messageDiv.innerHTML = result.detail || "An error occurred";
         messageDiv.className = "error";
       }
 
