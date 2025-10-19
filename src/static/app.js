@@ -29,7 +29,12 @@ document.addEventListener("DOMContentLoaded", () => {
         if (participants.length > 0) {
           participantsHtml += "<ul>";
           participantsHtml += participants
-            .map((p) => `<li><span class="participant-badge">${p}</span></li>`)
+            .map(
+              (p) =>
+                `<li><span class="participant-badge">${p}</span> <button class="participant-delete" data-activity="${encodeURIComponent(
+                  name
+                )}" data-email="${encodeURIComponent(p)}" title="Unregister">&times;</button></li>`
+            )
             .join("");
           participantsHtml += "</ul>";
         } else {
@@ -47,6 +52,37 @@ document.addEventListener("DOMContentLoaded", () => {
         `;
 
         activitiesList.appendChild(activityCard);
+
+          // Attach delete handlers for participant remove buttons
+          const deleteButtons = activityCard.querySelectorAll(".participant-delete");
+          deleteButtons.forEach((btn) => {
+            btn.addEventListener("click", async (e) => {
+              const activityName = decodeURIComponent(btn.getAttribute("data-activity"));
+              const email = decodeURIComponent(btn.getAttribute("data-email"));
+
+              if (!confirm(`Unregister ${email} from ${activityName}?`)) return;
+
+              try {
+                const res = await fetch(
+                  `/activities/${encodeURIComponent(activityName)}/participants?email=${encodeURIComponent(
+                    email
+                  )}`,
+                  { method: "DELETE" }
+                );
+
+                const result = await res.json();
+                if (res.ok) {
+                  // Refresh the list
+                  fetchActivities();
+                } else {
+                  alert(result.detail || "Failed to unregister participant");
+                }
+              } catch (err) {
+                console.error("Error unregistering:", err);
+                alert("Error unregistering participant. See console for details.");
+              }
+            });
+          });
 
         // Add option to select dropdown — use innerHTML so escaped entities decode
         const option = document.createElement("option");
